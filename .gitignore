@@ -1,0 +1,15 @@
+# Environment
+.env
+
+# IDE
+.idea/
+
+# Logs
+logs/
+
+# Site content (project-specific, not template)
+src/*
+!src/.gitkeep
+
+# Claude local settings
+.claude/settings.local.json
