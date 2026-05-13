@@ -106,7 +106,7 @@ db-reset: ## Пересоздать volume базы данных (удалит �
 	@echo "${YELLOW}Остановка контейнеров...${NC}"
 	docker compose down
 	@echo "${YELLOW}Удаление volume базы данных...${NC}"
-	docker volume rm task-ex-db || true
+	docker volume rm ${COMPOSE_PROJECT_NAME}-db || true
 	@echo "${GREEN}Запуск контейнеров с новым volume...${NC}"
 	docker compose up -d
 	@echo "${GREEN}База данных пересоздана!${NC}"

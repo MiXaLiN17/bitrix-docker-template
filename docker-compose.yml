@@ -17,7 +17,7 @@ services:
       - app
       - db
     networks:
-      - ford-transit
+      - app
   app:
     container_name: '${COMPOSE_PROJECT_NAME}_app'
     build:
@@ -37,7 +37,7 @@ services:
     extra_hosts: # Важно!
       - "host.docker.internal:host-gateway"
     networks:
-      - ford-transit
+      - app
   db:
     build:
       context: ./.docker/mysql
@@ -49,7 +49,7 @@ services:
     volumes:
       # монтируем данные на внешний диск
       - type: volume
-        source: ford-transit-ex-db
+        source: db-data
         target: /var/lib/mysql
       # монтируем логи
       - type: bind
@@ -63,11 +63,13 @@ services:
       MYSQL_PASSWORD: '${MYSQL_PASSWORD}'
 #      MYSQL_ALLOW_EMPTY_PASSWORD: 1
     networks:
-      - ford-transit
+      - app
 
 volumes:
-  ford-transit-ex-db:
+  db-data:
     driver: local
+    name: ${COMPOSE_PROJECT_NAME}-db
 networks:
-  ford-transit:
+  app:
     driver: bridge
+    name: ${COMPOSE_PROJECT_NAME}
