@@ -1,0 +1,90 @@
+#!/bin/bash
+set -euo pipefail
+
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Guard: prevent re-running on an already configured project
+if [ -f ".env" ]; then
+    echo -e "${RED}Error: .env already exists. Remove it before running create.sh again.${NC}"
+    exit 1
+fi
+
+# Detect default project name: directory name up to first dot
+DEFAULT_PROJECT_NAME=$(basename "$PWD" | cut -d'.' -f1)
+
+# Find first free port in range 81-500
+find_free_port() {
+    for port in $(seq 81 500); do
+        if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
+            echo "$port"
+            return
+        fi
+    done
+    echo ""
+}
+
+DEFAULT_PORT=$(find_free_port)
+
+# Prompt: project name
+read -rp "Project name [${DEFAULT_PROJECT_NAME}]: " PROJECT_NAME
+PROJECT_NAME="${PROJECT_NAME:-$DEFAULT_PROJECT_NAME}"
+
+# Prompt: HTTP port
+if [ -n "$DEFAULT_PORT" ]; then
+    read -rp "HTTP port [${DEFAULT_PORT}]: " HTTP_PORT
+    HTTP_PORT="${HTTP_PORT:-$DEFAULT_PORT}"
+else
+    echo -e "${YELLOW}No free port found in range 81-500. Enter port manually:${NC}"
+    read -rp "HTTP port: " HTTP_PORT
+    while [ -z "$HTTP_PORT" ]; do
+        read -rp "HTTP port: " HTTP_PORT
+    done
+fi
+
+# Generate .env from .env.example
+cp .env.example .env
+
+# Helper: replace variable in .env, append if not present
+set_env_var() {
+    local key="$1"
+    local value="$2"
+    if grep -q "^${key}=" .env; then
+        sed -i "s|^${key}=.*|${key}=${value}|" .env
+    else
+        echo "${key}=${value}" >> .env
+    fi
+}
+
+set_env_var "COMPOSE_PROJECT_NAME" "$PROJECT_NAME"
+set_env_var "UID" "$(id -u)"
+set_env_var "GID" "$(id -g)"
+set_env_var "HOST_MACHINE_UNSECURE_HOST_PORT" "$HTTP_PORT"
+
+# Create log directories and src placeholder
+mkdir -p ./logs/nginx ./logs/app ./logs/mysql ./logs/frontend ./src
+
+echo -e "${GREEN}Environment configured:${NC}"
+echo -e "  Project : ${PROJECT_NAME}"
+echo -e "  URL     : http://localhost:${HTTP_PORT}"
+
+# Build Docker images
+echo -e "${GREEN}Building Docker images...${NC}"
+if ! make build; then
+    echo -e "${RED}Build failed. Fix the error and run 'make build && make up' manually.${NC}"
+    exit 1
+fi
+
+# Start containers
+echo -e "${GREEN}Starting containers...${NC}"
+if ! make up; then
+    echo -e "${RED}Failed to start containers. Fix the error and run 'make up' manually.${NC}"
+    exit 1
+fi
+
+echo -e "${GREEN}Done! Project '${PROJECT_NAME}' is running at http://localhost:${HTTP_PORT}${NC}"
+
+# Self-delete: script is no longer needed after successful init
+rm -- "$0"
