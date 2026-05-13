@@ -121,10 +121,10 @@ rebuild: down build up ## Пересобрать и перезапустить �
 
 restore: ## Скачать restore.php
 	@echo "${YELLOW}Скачиваем restore.php с сайта bitrix...${NC}"
-	wget -q -O ./restore.php https://www.1c-bitrix.ru/download/files/scripts/restore.php
+	wget -q -O ./src/restore.php https://www.1c-bitrix.ru/download/files/scripts/restore.php
 	@echo "${GREEN}Файл скачан!${NC}"
 
 setup: ## Скачать bitrixsetup.php
 	@echo "${YELLOW}Скачиваем bitrixsetup.php с сайта bitrix...${NC}"
-	wget -q -O ./bitrixsetup.php https://www.1c-bitrix.ru/download/files/scripts/bitrixsetup.php
+	wget -q -O ./src/bitrixsetup.php https://www.1c-bitrix.ru/download/files/scripts/bitrixsetup.php
 	@echo "${GREEN}Файл скачан!${NC}"
