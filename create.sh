@@ -15,9 +15,9 @@ fi
 # Detect default project name: directory name up to first dot
 DEFAULT_PROJECT_NAME=$(basename "$PWD" | cut -d'.' -f1)
 
-# Find first free port in range 81-500
+# Find first free port in range 80-500
 find_free_port() {
-    for port in $(seq 81 500); do
+    for port in $(seq 80 500); do
         if ! ss -tlnp 2>/dev/null | grep -q ":${port} "; then
             echo "$port"
             return
@@ -37,7 +37,7 @@ if [ -n "$DEFAULT_PORT" ]; then
     read -rp "HTTP port [${DEFAULT_PORT}]: " HTTP_PORT
     HTTP_PORT="${HTTP_PORT:-$DEFAULT_PORT}"
 else
-    echo -e "${YELLOW}No free port found in range 81-500. Enter port manually:${NC}"
+    echo -e "${YELLOW}No free port found in range 80-500. Enter port manually:${NC}"
     read -rp "HTTP port: " HTTP_PORT
     while [ -z "$HTTP_PORT" ]; do
         read -rp "HTTP port: " HTTP_PORT
