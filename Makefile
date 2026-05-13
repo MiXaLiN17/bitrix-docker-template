@@ -17,7 +17,6 @@ WEBSERVER_CONTAINER = ${COMPOSE_PROJECT_NAME}_webserver
 PHP_CONTAINER = ${COMPOSE_PROJECT_NAME}_app
 DB_CONTAINER = ${COMPOSE_PROJECT_NAME}_db
 COMPOSER_DIR = ./
-CONSOLE_DIE = ./local/console
 
 help: ## Показать справку по командам
 	@echo "${GREEN}Доступные команды:${NC}"
@@ -56,14 +55,6 @@ logs-app: ## Показать логи php
 
 ps: ## Показать статус контейнеров
 	docker compose ps
-
-migrate: ## Установить миграции
-	@echo "${GREEN}Установка миграций в проект...${NC}"
-	@docker exec -it --user ${UID}:${GID} ${PHP_CONTAINER} bash -c "cd $(CONSOLE_DIE) && php -f migrate.php migrate || { echo '❌ Migrations failed'; exit 1; }"
-
-swagger: ## Установить миграции
-	@echo "${GREEN}Генарация swagger документации...${NC}"
-	@docker exec -it --user ${UID}:${GID} ${PHP_CONTAINER} bash -c "cd $(CONSOLE_DIE) && php -f swagger.php || { echo '❌ Generate swagger fail'; exit 1; }"
 
 composer-install: ## Установить зависимости Composer
 	@echo "${GREEN}Установка зависимостей Composer в $(COMPOSER_DIR)...${NC}"
