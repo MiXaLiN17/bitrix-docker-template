@@ -43,8 +43,8 @@ services:
     container_name: '${COMPOSE_PROJECT_NAME}_db'
     #    restart: always
     command: mysqld --sql-mode=""
-    ports:
-      - ${HOST_MACHINE_MYSQL_PORT:-3306}:3306
+    # ports:
+    #   - ${HOST_MACHINE_MYSQL_PORT:-3306}:3306
     volumes:
       # монтируем данные на внешний диск
       - type: volume
