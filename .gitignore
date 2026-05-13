@@ -11,4 +11,4 @@ logs/
 src/*
 
 # Claude local settings
-.claude/settings.local.json
+.claude/
