@@ -44,6 +44,25 @@ else
     done
 fi
 
+# Prompt: PHP version
+PHP_VERSIONS=("8.4" "8.3" "8.2" "8.1")
+DEFAULT_PHP_VERSION="8.4"
+echo "PHP version:"
+for i in "${!PHP_VERSIONS[@]}"; do
+    if [ "${PHP_VERSIONS[$i]}" = "$DEFAULT_PHP_VERSION" ]; then
+        echo "  $((i+1))) ${PHP_VERSIONS[$i]} (default)"
+    else
+        echo "  $((i+1))) ${PHP_VERSIONS[$i]}"
+    fi
+done
+read -rp "Select [1]: " PHP_CHOICE
+case "$PHP_CHOICE" in
+    2) PHP_VERSION="8.3" ;;
+    3) PHP_VERSION="8.2" ;;
+    4) PHP_VERSION="8.1" ;;
+    *) PHP_VERSION="8.4" ;;
+esac
+
 # Generate .env from .env.example
 cp .env.example .env
 
@@ -62,12 +81,14 @@ set_env_var "COMPOSE_PROJECT_NAME" "$PROJECT_NAME"
 set_env_var "UID" "$(id -u)"
 set_env_var "GID" "$(id -g)"
 set_env_var "HOST_MACHINE_UNSECURE_HOST_PORT" "$HTTP_PORT"
+set_env_var "PHP_VERSION" "$PHP_VERSION"
 
 # Create log directories and src placeholder
 mkdir -p ./logs/nginx ./logs/app ./logs/mysql ./logs/frontend ./src
 
 echo -e "${GREEN}Environment configured:${NC}"
 echo -e "  Project : ${PROJECT_NAME}"
+echo -e "  PHP     : ${PHP_VERSION}"
 echo -e "  URL     : http://localhost:${HTTP_PORT}"
 
 # Build Docker images

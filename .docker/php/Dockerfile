@@ -1,76 +1,30 @@
-FROM php:8.3-fpm-alpine
+ARG PHP_VERSION=8.4
+FROM php:${PHP_VERSION}-fpm-alpine
 
 ARG UID=1000
 ARG GID=1000
 ENV UID=${UID}
 ENV GID=${GID}
 
-# Устанавливаем системные зависимости
+# Устанавливаем зависимости, расширения PHP и очищаем за собой в одном слое
 RUN apk add --no-cache \
-    git \
-    curl \
-    openssl \
-    wget \
-    unzip \
-    zip \
-    bash \
-    libzip-dev \
-    libpng-dev \
-    libjpeg-turbo-dev \
-    libwebp-dev \
-    freetype-dev \
-    libxml2-dev \
-    icu-dev \
-    gmp-dev \
-    oniguruma-dev \
-    libmemcached-dev \
-    imagemagick \
-    imagemagick-libs \
-    imagemagick-dev \
-    zlib-dev \
-    libevent-dev \
-    shadow
-
-# Устанавливаем инструменты сборки
-RUN apk add --no-cache --virtual .build-deps \
-    autoconf \
-    build-base \
-    pkgconfig \
-    libtool \
-    linux-headers
-
-# Устанавливаем расширения PHP через docker-php-ext-install
-RUN docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp && \
-    docker-php-ext-install \
-    mysqli \
-    gd \
-    gmp \
-    xml \
-    intl \
-    mbstring \
-    bcmath \
-    opcache \
-    zip \
-    calendar \
-    bz2 \
-    ftp
-
-# Устанавливаем PECL расширения по одному
-# RUN pecl install redis && docker-php-ext-enable redis
-
-#RUN pecl install memcached && docker-php-ext-enable memcached
-
-RUN pecl install imagick && docker-php-ext-enable imagick
-# Устанавливаем Xdebug с явным указанием версии для совместимости
-RUN pecl install xdebug-3.4.1 && docker-php-ext-enable xdebug
-
-# Удаляем инструменты сборки после установки
-RUN apk del .build-deps && \
-    rm -rf /tmp/pear && \
-    rm -rf /var/cache/apk/*
-
-# Создаем директории и настраиваем права
-RUN mkdir -p /var/www/src /var/log/php /tmp/php
+        git curl openssl wget unzip zip bash shadow \
+        libzip-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
+        libxml2-dev icu-dev gmp-dev oniguruma-dev libmemcached-dev \
+        imagemagick imagemagick-libs imagemagick-dev \
+        zlib-dev libevent-dev \
+    && apk add --no-cache --virtual .build-deps \
+        autoconf build-base pkgconfig libtool linux-headers \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install \
+        mysqli gd gmp xml intl mbstring bcmath opcache zip calendar bz2 ftp \
+    && pecl install imagick \
+    && docker-php-ext-enable imagick \
+    && pecl install xdebug-3.4.1 \
+    && docker-php-ext-enable xdebug \
+    && apk del .build-deps \
+    && rm -rf /tmp/pear /var/cache/apk/* \
+    && mkdir -p /var/www/src /var/log/php /tmp/php
 
 # Устанавливаем Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
@@ -84,7 +38,7 @@ COPY conf/xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
 # Настраиваем рабочую директорию
 WORKDIR /var/www/src
 
-# Изменяем UID/GID пользователя www-data (теперь команды доступны)
+# Изменяем UID/GID пользователя www-data
 RUN usermod -u $UID www-data && groupmod -g $GID www-data
 
 # Health check для PHP-FPM

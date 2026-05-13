@@ -16,9 +16,6 @@ docker-compose.yml
 
 Makefile
 
-/local/frontend
-/bitrix
-/upload
 /logs
 /.stuff
 /.claude

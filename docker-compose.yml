@@ -25,6 +25,7 @@ services:
       args:
         UID: ${UID:-1000}
         GID: ${GID:-1000}
+        PHP_VERSION: ${PHP_VERSION:-8.4}
     volumes:
       - ./src:/var/www/src
       - ${APP_LOG_DIR}:/var/log/php
