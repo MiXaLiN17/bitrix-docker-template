@@ -7,14 +7,15 @@ ENV UID=${UID}
 ENV GID=${GID}
 
 # Устанавливаем зависимости, расширения PHP и очищаем за собой в одном слое
-RUN apk add --no-cache \
+RUN apk update \
+    && apk add \
         git curl openssl wget unzip zip bash shadow \
         libzip-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
         libxml2-dev icu-dev gmp-dev oniguruma-dev libmemcached-dev \
         imagemagick imagemagick-libs imagemagick-dev \
         zlib-dev libevent-dev \
-    && apk add --no-cache --virtual .build-deps \
-        autoconf build-base pkgconfig libtool linux-headers \
+    && apk add --virtual .build-deps \
+        autoconf build-base pkgconfig libtool linux-headers openssl-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install \
         mysqli gd gmp xml intl mbstring bcmath opcache zip calendar bz2 ftp \

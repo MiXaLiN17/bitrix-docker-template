@@ -109,6 +109,7 @@ echo -e "${GREEN}Done! Project '${PROJECT_NAME}' is running at http://localhost:
 
 # Remove template git history
 rm -rf .git
+rm -rf .gitignore
 
 # Self-delete: script is no longer needed after successful init
 rm -- "$0"
