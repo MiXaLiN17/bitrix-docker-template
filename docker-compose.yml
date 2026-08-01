@@ -64,11 +64,37 @@ services:
 #      MYSQL_ALLOW_EMPTY_PASSWORD: 1
     networks:
       - app
+  sphinx:
+    # Опциональный сервис: собирается и запускается, только если в .env
+    # указан COMPOSE_PROFILES=sphinx (см. make sphinx-enable / sphinx-disable)
+    profiles:
+      - sphinx
+    build:
+      context: ./.docker/sphinx
+    container_name: '${COMPOSE_PROJECT_NAME}_sphinx'
+    #    restart: always
+    volumes:
+      # RT-индекс и бинлог храним в volume, чтобы индекс переживал пересоздание контейнера
+      - type: volume
+        source: sphinx-data
+        target: /var/lib/sphinxsearch/data
+      # монтируем логи
+      - type: bind
+        source: ${SPHINX_LOG_DIR:-./logs/sphinx}
+        target: /var/log/sphinxsearch
+    # Порт наружу не нужен: Битрикс ходит в sphinx:9306 внутри сети app
+    # ports:
+    #   - ${HOST_MACHINE_SPHINX_PORT:-9306}:9306
+    networks:
+      - app
 
 volumes:
   db-data:
     driver: local
     name: ${COMPOSE_PROJECT_NAME}-db
+  sphinx-data:
+    driver: local
+    name: ${COMPOSE_PROJECT_NAME}-sphinx
 networks:
   app:
     driver: bridge

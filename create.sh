@@ -63,6 +63,13 @@ case "$PHP_CHOICE" in
     *) PHP_VERSION="8.4" ;;
 esac
 
+# Prompt: optional Sphinx full-text search container
+read -rp "Install Sphinx full-text search? [y/N]: " SPHINX_CHOICE
+case "$SPHINX_CHOICE" in
+    [yY]|[yY][eE][sS]) COMPOSE_PROFILES="sphinx" ;;
+    *) COMPOSE_PROFILES="" ;;
+esac
+
 # Generate .env from .env.example
 cp .env.example .env
 
@@ -82,13 +89,15 @@ set_env_var "UID" "$(id -u)"
 set_env_var "GID" "$(id -g)"
 set_env_var "HOST_MACHINE_UNSECURE_HOST_PORT" "$HTTP_PORT"
 set_env_var "PHP_VERSION" "$PHP_VERSION"
+set_env_var "COMPOSE_PROFILES" "$COMPOSE_PROFILES"
 
 # Create log directories and src placeholder
-mkdir -p ./logs/nginx ./logs/app ./logs/mysql ./logs/frontend ./src
+mkdir -p ./logs/webserver ./logs/app ./logs/mysql ./logs/sphinx ./logs/frontend ./src
 
 echo -e "${GREEN}Environment configured:${NC}"
 echo -e "  Project : ${PROJECT_NAME}"
 echo -e "  PHP     : ${PHP_VERSION}"
+echo -e "  Sphinx  : $([ -n "$COMPOSE_PROFILES" ] && echo "yes" || echo "no (enable later: make sphinx-enable)")"
 echo -e "  URL     : http://localhost:${HTTP_PORT}"
 
 # Build Docker images
