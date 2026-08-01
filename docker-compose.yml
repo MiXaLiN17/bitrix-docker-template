@@ -41,6 +41,8 @@ services:
   db:
     build:
       context: ./.docker/mysql
+      args:
+        MYSQL_VERSION: ${MYSQL_VERSION:-8.4}
     container_name: '${COMPOSE_PROJECT_NAME}_db'
     #    restart: always
     command: mysqld --sql-mode=""
