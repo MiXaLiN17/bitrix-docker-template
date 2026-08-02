@@ -63,6 +63,36 @@ case "$PHP_CHOICE" in
     *) PHP_VERSION="8.4" ;;
 esac
 
+# Prompt: MySQL version
+# 8.4 and 8.0 are LTS releases; 8.1-8.3 are EOL Innovation releases kept for parity
+# with legacy production servers. Bitrix requires 8.0 minimum and recommends 8.4+.
+MYSQL_VERSIONS=("8.4" "8.3" "8.2" "8.1" "8.0")
+DEFAULT_MYSQL_VERSION="8.4"
+echo "MySQL version:"
+for i in "${!MYSQL_VERSIONS[@]}"; do
+    case "${MYSQL_VERSIONS[$i]}" in
+        8.4) note=" (default, LTS, recommended by Bitrix)" ;;
+        8.0) note=" (LTS, minimum supported by Bitrix)" ;;
+        *)   note=" (Innovation, EOL)" ;;
+    esac
+    echo "  $((i+1))) ${MYSQL_VERSIONS[$i]}${note}"
+done
+read -rp "Select [1]: " MYSQL_CHOICE
+case "$MYSQL_CHOICE" in
+    2) MYSQL_VERSION="8.3" ;;
+    3) MYSQL_VERSION="8.2" ;;
+    4) MYSQL_VERSION="8.1" ;;
+    5) MYSQL_VERSION="8.0" ;;
+    *) MYSQL_VERSION="$DEFAULT_MYSQL_VERSION" ;;
+esac
+
+# Prompt: optional Sphinx full-text search container
+read -rp "Install Sphinx full-text search? [y/N]: " SPHINX_CHOICE
+case "$SPHINX_CHOICE" in
+    [yY]|[yY][eE][sS]) COMPOSE_PROFILES="sphinx" ;;
+    *) COMPOSE_PROFILES="" ;;
+esac
+
 # Generate .env from .env.example
 cp .env.example .env
 
@@ -82,13 +112,17 @@ set_env_var "UID" "$(id -u)"
 set_env_var "GID" "$(id -g)"
 set_env_var "HOST_MACHINE_UNSECURE_HOST_PORT" "$HTTP_PORT"
 set_env_var "PHP_VERSION" "$PHP_VERSION"
+set_env_var "MYSQL_VERSION" "$MYSQL_VERSION"
+set_env_var "COMPOSE_PROFILES" "$COMPOSE_PROFILES"
 
 # Create log directories and src placeholder
-mkdir -p ./logs/nginx ./logs/app ./logs/mysql ./logs/frontend ./src
+mkdir -p ./logs/webserver ./logs/app ./logs/mysql ./logs/sphinx ./logs/frontend ./src
 
 echo -e "${GREEN}Environment configured:${NC}"
 echo -e "  Project : ${PROJECT_NAME}"
 echo -e "  PHP     : ${PHP_VERSION}"
+echo -e "  MySQL   : ${MYSQL_VERSION}"
+echo -e "  Sphinx  : $([ -n "$COMPOSE_PROFILES" ] && echo "yes" || echo "no (enable later: make sphinx-enable)")"
 echo -e "  URL     : http://localhost:${HTTP_PORT}"
 
 # Build Docker images

@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs ps composer-install composer-update composer-require composer-remove shell shell-db clean db-reset db-connect
+.PHONY: help build up down restart logs ps composer-install composer-update composer-require composer-remove shell shell-db clean db-reset db-connect sphinx-enable sphinx-disable sphinx-cli sphinx-status sphinx-truncate
 
 # Подключение .env файла
 ifneq (,$(wildcard ./.env))
@@ -16,7 +16,23 @@ COMPOSE_PROJECT_NAME ?= clear
 WEBSERVER_CONTAINER = ${COMPOSE_PROJECT_NAME}_webserver
 PHP_CONTAINER = ${COMPOSE_PROJECT_NAME}_app
 DB_CONTAINER = ${COMPOSE_PROJECT_NAME}_db
+SPHINX_CONTAINER = ${COMPOSE_PROJECT_NAME}_sphinx
 COMPOSER_DIR = ./
+
+# Профили всех опциональных сервисов. Команды остановки, логов и статуса должны видеть
+# весь стек: docker compose down не трогает контейнеры сервисов с неактивным профилем
+ALL_PROFILES = sphinx
+COMPOSE_ALL = COMPOSE_PROFILES=$(ALL_PROFILES) docker compose
+
+# Идентификатор индекса из .docker/sphinx/conf/sphinx.conf
+SPHINX_INDEX = bitrix
+# Профиль задаём явно, чтобы команды работали независимо от COMPOSE_PROFILES в .env
+SPHINX_COMPOSE = COMPOSE_PROFILES=sphinx docker compose
+SPHINX_SQL = $(SPHINX_COMPOSE) exec sphinx mysql -h 127.0.0.1 -P 9306
+SPHINX_GUARD = if [ -z "$$(docker ps -q -f name=^/${SPHINX_CONTAINER}$$)" ]; then \
+		echo "${YELLOW}Контейнер ${SPHINX_CONTAINER} не запущен. Включить Sphinx: make sphinx-enable${NC}"; \
+		exit 1; \
+	fi
 
 help: ## Показать справку по командам
 	@echo "${GREEN}Доступные команды:${NC}"
@@ -33,16 +49,16 @@ up: ## Запустить проект
 
 down: ## Выключить Docker контейнеры
 	@echo "${YELLOW}Остановка Docker контейнеров...${NC}"
-	docker compose down
+	$(COMPOSE_ALL) down
 	@echo "${GREEN}Контейнеры остановлены!${NC}"
 
 restart: ## Перезапустить проект
 	@echo "${YELLOW}Перезапуск проекта...${NC}"
-	docker compose restart
+	$(COMPOSE_ALL) restart
 	@echo "${GREEN}Проект перезапущен!${NC}"
 
 logs: ## Показать логи всех контейнеров
-	docker compose logs -f
+	$(COMPOSE_ALL) logs -f
 
 logs-web: ## Показать логи веб-сервера
 	docker compose logs -f webserver
@@ -53,8 +69,11 @@ logs-db: ## Показать логи базы данных
 logs-app: ## Показать логи php
 	docker compose logs -f app
 
+logs-sphinx: ## Показать логи Sphinx
+	$(SPHINX_COMPOSE) logs -f sphinx
+
 ps: ## Показать статус контейнеров
-	docker compose ps
+	$(COMPOSE_ALL) ps
 
 composer-install: ## Установить зависимости Composer
 	@echo "${GREEN}Установка зависимостей Composer в $(COMPOSER_DIR)...${NC}"
@@ -93,6 +112,11 @@ shell-app: ## Открыть shell в контейнере php
 	@echo "${GREEN}Подключение к контейнеру php...${NC}"
 	docker compose exec app bash
 
+shell-sphinx: ## Открыть shell в контейнере Sphinx
+	@$(SPHINX_GUARD)
+	@echo "${GREEN}Подключение к контейнеру Sphinx...${NC}"
+	$(SPHINX_COMPOSE) exec sphinx bash
+
 mysql: ## Подключиться к MySQL
 	docker compose exec db mysql -uroot -p
 
@@ -104,16 +128,53 @@ db-reset: ## Пересоздать volume базы данных (удалит �
 	@echo "${YELLOW}ВНИМАНИЕ: Это удалит все данные базы данных!${NC}"
 	@read -p "Продолжить? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 1
 	@echo "${YELLOW}Остановка контейнеров...${NC}"
-	docker compose down
+	$(COMPOSE_ALL) down
 	@echo "${YELLOW}Удаление volume базы данных...${NC}"
 	docker volume rm ${COMPOSE_PROJECT_NAME}-db || true
 	@echo "${GREEN}Запуск контейнеров с новым volume...${NC}"
 	docker compose up -d
 	@echo "${GREEN}База данных пересоздана!${NC}"
 
+sphinx-enable: ## Включить сервис Sphinx (профиль в .env) и запустить его
+	@if [ ! -f .env ]; then echo "${YELLOW}Нет файла .env${NC}"; exit 1; fi
+	@if grep -q "^COMPOSE_PROFILES=" .env; then \
+		sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=sphinx|" .env; \
+	else \
+		echo "COMPOSE_PROFILES=sphinx" >> .env; \
+	fi
+	@mkdir -p ./logs/sphinx
+	@echo "${GREEN}Профиль sphinx включён, собираем и запускаем контейнер...${NC}"
+	$(SPHINX_COMPOSE) up -d --build sphinx
+	@echo "${GREEN}Sphinx запущен. Настройки для админки Битрикса: sphinx:9306, индекс '${SPHINX_INDEX}'${NC}"
+
+sphinx-disable: ## Отключить сервис Sphinx и удалить его контейнер
+	@if [ ! -f .env ]; then echo "${YELLOW}Нет файла .env${NC}"; exit 1; fi
+	@echo "${YELLOW}Остановка и удаление контейнера Sphinx (индекс в volume сохранится)...${NC}"
+	-@$(SPHINX_COMPOSE) rm -sf sphinx
+	@if grep -q "^COMPOSE_PROFILES=" .env; then \
+		sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|" .env; \
+	fi
+	@echo "${GREEN}Профиль sphinx отключён${NC}"
+
+sphinx-cli: ## Открыть консоль SphinxQL
+	@$(SPHINX_GUARD)
+	@echo "${GREEN}Подключение к SphinxQL (${SPHINX_CONTAINER}:9306)...${NC}"
+	$(SPHINX_SQL)
+
+sphinx-status: ## Показать индексы и статистику Sphinx
+	@$(SPHINX_GUARD)
+	@$(SPHINX_SQL) -e "SHOW TABLES; SELECT COUNT(*) AS documents FROM ${SPHINX_INDEX}; SHOW STATUS;"
+
+sphinx-truncate: ## Очистить индекс Sphinx (после нужна переиндексация в админке Битрикса)
+	@$(SPHINX_GUARD)
+	@echo "${YELLOW}ВНИМАНИЕ: индекс '${SPHINX_INDEX}' будет очищен!${NC}"
+	@read -p "Продолжить? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 1
+	@$(SPHINX_SQL) -e "TRUNCATE RTINDEX ${SPHINX_INDEX};"
+	@echo "${GREEN}Индекс очищен. Выполните переиндексацию: Настройки > Поиск > Переиндексация${NC}"
+
 clean: ## Остановить и удалить все контейнеры, сети и volumes
 	@echo "${YELLOW}Удаление всех контейнеров, сетей и volumes...${NC}"
-	docker compose down -v
+	$(COMPOSE_ALL) down -v
 	@echo "${GREEN}Очистка завершена!${NC}"
 
 rebuild: down build up ## Пересобрать и перезапустить проект
