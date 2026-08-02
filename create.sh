@@ -116,7 +116,7 @@ set_env_var "MYSQL_VERSION" "$MYSQL_VERSION"
 set_env_var "COMPOSE_PROFILES" "$COMPOSE_PROFILES"
 
 # Create log directories and src placeholder
-mkdir -p ./logs/webserver ./logs/app ./logs/mysql ./logs/sphinx ./logs/frontend ./src
+mkdir -p ./logs/webserver ./logs/app ./logs/mysql ./logs/sphinx ./src
 
 echo -e "${GREEN}Environment configured:${NC}"
 echo -e "  Project : ${PROJECT_NAME}"

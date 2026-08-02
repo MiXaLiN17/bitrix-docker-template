@@ -6,16 +6,21 @@ ARG GID=1000
 ENV UID=${UID}
 ENV GID=${GID}
 
-# Устанавливаем зависимости, расширения PHP и очищаем за собой в одном слое
+# Устанавливаем зависимости, расширения PHP и очищаем за собой в одном слое.
+# Первым блоком — то, что нужно в рантайме, вторым — заголовки для сборки расширений:
+# они попадают во временный пакет .build-deps и удаляются сразу после компиляции,
+# иначе десяток -dev пакетов остаётся в готовом образе мёртвым грузом.
 RUN apk update \
     && apk add \
         git curl openssl wget unzip zip bash shadow \
-        libzip-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
-        libxml2-dev icu-dev gmp-dev oniguruma-dev libmemcached-dev \
-        imagemagick imagemagick-libs imagemagick-dev \
-        zlib-dev libevent-dev \
+        imagemagick imagemagick-libs \
+        libzip libpng libjpeg-turbo libwebp freetype \
+        libxml2 icu-libs gmp oniguruma libbz2 \
     && apk add --virtual .build-deps \
         autoconf build-base pkgconfig libtool linux-headers openssl-dev \
+        libzip-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
+        libxml2-dev icu-dev gmp-dev oniguruma-dev bzip2-dev \
+        imagemagick-dev zlib-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install \
         mysqli gd gmp xml intl mbstring bcmath opcache zip calendar bz2 ftp \
