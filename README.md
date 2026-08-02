@@ -173,6 +173,37 @@ make sphinx-disable   # удалит контейнер, индекс в volume 
 Порт наружу не пробрасывается: контейнер `app` ходит в `sphinx:9306` внутри сети docker. Если нужен доступ
 с хоста — раскомментируйте секцию `ports` у сервиса `sphinx` в `docker-compose.yml`.
 
+### Обновление шаблона на проекте, где Sphinx уже работал
+
+Раньше контейнер Sphinx работал от `root` и создавал файлы индекса с владельцем `root:root`. Теперь демон
+запускается от непривилегированного пользователя с UID/GID хоста, поэтому старые файлы ему недоступны и
+контейнер после обновления не поднимется:
+
+```
+WARNING: index 'bitrix': preload: failed to open /var/lib/sphinxsearch/data/bitrix.lock: Permission denied; NOT SERVING
+FATAL: no valid indexes to serve
+```
+
+Лечится сменой владельца файлов в volume — **индекс при этом сохраняется, переиндексация не нужна**:
+
+```bash
+make sphinx-disable
+docker run --rm -u 0:0 -v $(grep '^COMPOSE_PROJECT_NAME=' .env | cut -d= -f2)-sphinx:/data \
+    alpine chown -R $(id -u):$(id -g) /data
+make sphinx-enable
+```
+
+Если индекс не жалко, можно просто пересоздать volume — тогда после запуска понадобится полная
+переиндексация из админки (*Настройки → Поиск → Переиндексация*):
+
+```bash
+make sphinx-disable
+docker volume rm $(grep '^COMPOSE_PROJECT_NAME=' .env | cut -d= -f2)-sphinx
+make sphinx-enable
+```
+
+Новых установок это не касается: volume создаётся сразу с правильным владельцем.
+
 ---
 
 ## Переменные окружения
