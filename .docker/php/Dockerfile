@@ -16,16 +16,27 @@ RUN apk update \
         imagemagick imagemagick-libs \
         libzip libpng libjpeg-turbo libwebp freetype \
         libxml2 icu-libs gmp oniguruma libbz2 \
+        libmemcached-libs libsasl \
     && apk add --virtual .build-deps \
         autoconf build-base pkgconfig libtool linux-headers openssl-dev \
         libzip-dev libpng-dev libjpeg-turbo-dev libwebp-dev freetype-dev \
         libxml2-dev icu-dev gmp-dev oniguruma-dev bzip2-dev \
-        imagemagick-dev zlib-dev \
+        imagemagick-dev zlib-dev libmemcached-dev cyrus-sasl-dev \
     && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
     && docker-php-ext-install \
         mysqli gd gmp xml intl mbstring bcmath opcache zip calendar bz2 ftp \
     && pecl install imagick \
     && docker-php-ext-enable imagick \
+    # Движок кеша Битрикс берёт из 'type' в bitrix/.settings.php: CacheEngineMemcache
+    # требует расширение memcache, CacheEngineMemcached — memcached. Это разные расширения,
+    # ставим оба, чтобы настройки, переехавшие с прода, заводились без правок: без нужного
+    # расширения ядро падает с NotSupportedException ещё до подключения к серверу кеша.
+    && pecl install memcache-8.2 \
+    && docker-php-ext-enable memcache \
+    # У memcached интерактивный configure (libmemcached, sasl, igbinary, json, msgpack) —
+    # пустые строки принимают значения по умолчанию
+    && printf '\n\n\n\n\n\n' | pecl install memcached-3.4.0 \
+    && docker-php-ext-enable memcached \
     && pecl install xdebug-3.4.1 \
     && docker-php-ext-enable xdebug \
     && apk del .build-deps \

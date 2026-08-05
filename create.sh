@@ -86,11 +86,29 @@ case "$MYSQL_CHOICE" in
     *) MYSQL_VERSION="$DEFAULT_MYSQL_VERSION" ;;
 esac
 
+# Optional services: every "yes" adds its Docker Compose profile to COMPOSE_PROFILES
+COMPOSE_PROFILES=""
+add_profile() {
+    if [ -z "$COMPOSE_PROFILES" ]; then
+        COMPOSE_PROFILES="$1"
+    else
+        COMPOSE_PROFILES="${COMPOSE_PROFILES},$1"
+    fi
+}
+
 # Prompt: optional Sphinx full-text search container
 read -rp "Install Sphinx full-text search? [y/N]: " SPHINX_CHOICE
 case "$SPHINX_CHOICE" in
-    [yY]|[yY][eE][sS]) COMPOSE_PROFILES="sphinx" ;;
-    *) COMPOSE_PROFILES="" ;;
+    [yY]|[yY][eE][sS]) add_profile "sphinx"; SPHINX_ENABLED="yes" ;;
+    *) SPHINX_ENABLED="" ;;
+esac
+
+# Prompt: optional memcached container. Needed when bitrix/.settings.php carries
+# 'type' => 'memcache' / 'memcached' — typical for a config copied from production.
+read -rp "Install memcached cache server? [y/N]: " MEMCACHED_CHOICE
+case "$MEMCACHED_CHOICE" in
+    [yY]|[yY][eE][sS]) add_profile "memcached"; MEMCACHED_ENABLED="yes" ;;
+    *) MEMCACHED_ENABLED="" ;;
 esac
 
 # Generate .env from .env.example
@@ -118,12 +136,18 @@ set_env_var "COMPOSE_PROFILES" "$COMPOSE_PROFILES"
 # Create log directories and src placeholder
 mkdir -p ./logs/webserver ./logs/app ./logs/mysql ./logs/sphinx ./src
 
+# src/.gitkeep нужен только репозиторию шаблона, чтобы пустой каталог попал в git.
+# У проекта src — корень сайта, и посторонний файл там ни к чему. Удаляем здесь,
+# а не в блоке очистки в конце: тот выполняется только при успешной сборке.
+rm -f ./src/.gitkeep
+
 echo -e "${GREEN}Environment configured:${NC}"
-echo -e "  Project : ${PROJECT_NAME}"
-echo -e "  PHP     : ${PHP_VERSION}"
-echo -e "  MySQL   : ${MYSQL_VERSION}"
-echo -e "  Sphinx  : $([ -n "$COMPOSE_PROFILES" ] && echo "yes" || echo "no (enable later: make sphinx-enable)")"
-echo -e "  URL     : http://localhost:${HTTP_PORT}"
+echo -e "  Project   : ${PROJECT_NAME}"
+echo -e "  PHP       : ${PHP_VERSION}"
+echo -e "  MySQL     : ${MYSQL_VERSION}"
+echo -e "  Sphinx    : $([ -n "$SPHINX_ENABLED" ] && echo "yes" || echo "no (enable later: make sphinx-enable)")"
+echo -e "  memcached : $([ -n "$MEMCACHED_ENABLED" ] && echo "yes" || echo "no (enable later: make memcached-enable)")"
+echo -e "  URL       : http://localhost:${HTTP_PORT}"
 
 # Build Docker images
 echo -e "${GREEN}Building Docker images...${NC}"

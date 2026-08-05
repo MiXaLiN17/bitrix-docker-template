@@ -1,8 +1,8 @@
-# clearbitrix.loc
+# Bitrix Docker Template
 
 Docker-шаблон для локальной разработки PHP-проектов на базе 1С-Битрикс.
 
-**Стек:** Nginx 1.29 · PHP-FPM 8.1–8.4 · MySQL 8.0–8.4 · Sphinx 2.2.11
+**Стек:** Nginx 1.29 · PHP-FPM 8.1–8.4 · MySQL 8.0–8.4 · Sphinx 2.2.11 · memcached 1.6
 
 ---
 
@@ -17,8 +17,8 @@ Docker-шаблон для локальной разработки PHP-прое�
 ## Быстрый старт
 
 ```bash
-git clone <repo-url> clearbitrix.loc
-cd clearbitrix.loc
+git clone git@github.com:MiXaLiN17/bitrix-docker-template.git myproject.loc
+cd myproject.loc
 ./create.sh
 ```
 
@@ -31,6 +31,7 @@ cd clearbitrix.loc
 | Версия PHP | 8.4 |
 | Версия MySQL | 8.4 |
 | Ставить ли Sphinx | нет |
+| Ставить ли memcached | нет |
 
 После ответов `create.sh` автоматически создаст `.env`, соберёт Docker-образы и запустит контейнеры. Затем удалит себя — повторный запуск не требуется.
 
@@ -64,7 +65,13 @@ make help   # показать все доступные команды
 | `make logs-app` | Логи PHP-FPM |
 | `make logs-db` | Логи MySQL |
 | `make logs-sphinx` | Логи Sphinx |
+| `make logs-memcached` | Логи memcached |
 | `make ps` | Статус контейнеров |
+
+Ошибки PHP пишутся не в `make logs-app` (там только лог самого FPM), а в файл `${APP_LOG_DIR}/error.log`
+на хосте — по умолчанию `./logs/app/error.log`. На страницу они не выводятся (`display_errors = Off`),
+в логе же включено всё, кроме `E_DEPRECATED`: предупреждения часто и есть настоящая причина падения,
+которое в самом коде выглядит как невнятный `TypeError` строкой ниже.
 
 ### Shell
 
@@ -118,6 +125,15 @@ make composer-remove  PACKAGE=vendor/package
 | `make sphinx-cli` | Консоль SphinxQL |
 | `make sphinx-status` | Индексы, число документов и статистика демона |
 | `make sphinx-truncate` | Очистить индекс (после нужна переиндексация в админке) |
+
+### memcached
+
+| Команда | Описание |
+|---|---|
+| `make memcached-enable` | Включить и запустить memcached |
+| `make memcached-disable` | Отключить memcached (кеш будет потерян) |
+| `make memcached-stats` | Объём кеша, попадания, промахи, вытеснения |
+| `make memcached-flush` | Очистить весь кеш |
 
 ---
 
@@ -206,6 +222,85 @@ make sphinx-enable
 
 ---
 
+## Кеш memcached
+
+memcached — **опциональный сервис**, по умолчанию выключен, как и Sphinx:
+
+```bash
+make memcached-enable    # поднимет контейнер
+make memcached-disable   # удалит контейнер
+```
+
+Нужен, когда `bitrix/.settings.php` переехал с прода вместе с настройкой кеша. Без сервера кеша
+Битрикс падает ещё до первого запроса к нему:
+
+```
+[Bitrix\Main\NotSupportedException] memcache extension is not loaded. (150)
+/bitrix/modules/main/lib/data/configurator/memcacheconnectionconfigurator.php:20
+```
+
+**Расширения PHP `memcache` и `memcached` установлены в образе всегда** — на этом сообщении сайт
+не остановится независимо от того, поднят контейнер или нет. `memcache` и `memcached` — два разных
+расширения, а не версии одного, и Битриксу они дают разные движки кеша: `CacheEngineMemcache`
+(подключение через `MemcacheConnection`) и `CacheEngineMemcached` (через `MemcachedConnection`).
+
+### Настройка в Битриксе
+
+Начиная с версии 18.5.200 — той же, в которой появилась поддержка Redis, — `type` в `.settings.php`
+задаётся массивом с классом движка и именем расширения. Старая короткая запись (`'type' => 'memcache'`)
+ядром по-прежнему понимается, но в новых конфигурациях лучше использовать актуальный формат:
+
+```php
+'cache' => [
+    'value' => [
+        'type' => [
+            'class_name' => '\\Bitrix\\Main\\Data\\CacheEngineMemcache',
+            'extension' => 'memcache',
+        ],
+        'memcache' => [
+            'host' => 'memcached',
+            'port' => '11211',
+        ],
+        'sid' => $_SERVER['DOCUMENT_ROOT'] . '#01',
+    ],
+    'readonly' => false,
+],
+```
+
+Ключ с параметрами подключения (`memcache`) должен совпадать со значением `extension`: ядро ищет
+`host`/`port` именно в `$cacheConfig[$extension]`. Для расширения `memcached` это соответственно
+`'class_name' => '\\Bitrix\\Main\\Data\\CacheEngineMemcached'`, `'extension' => 'memcached'` и секция
+`'memcached' => [...]`.
+
+У нового формата есть побочный плюс: по ключу `extension` ядро проверяет расширение до создания
+движка (`Bitrix\Main\Data\Cache::createCacheEngine()`) и, если его нет, откатывается на
+`CacheEngineNone` с предупреждением `Cache engine is not found` в логе. Старая короткая запись
+такой проверки не делает и роняет сайт фатальным `NotSupportedException`.
+
+**`host` — это имя сервиса из `docker-compose.yml`, то есть `memcached`.** Приехавший с прода
+`127.0.0.1` указывает на сам контейнер с PHP, где сервера кеша нет.
+
+Если сервер кеша на локальной машине не нужен, замените движок на файловый — Битрикс будет складывать
+кеш в `bitrix/cache`, и контейнер не понадобится:
+
+```php
+'type' => [
+    'class_name' => '\\Bitrix\\Main\\Data\\CacheEngineFiles',
+],
+```
+
+### Конфигурация
+
+Потолок памяти под кеш задаётся переменной `MEMCACHED_MEMORY` в `.env` (по умолчанию 256 МБ). При
+исчерпании лимита memcached вытесняет старые записи, а не отдаёт ошибку, поэтому значение влияет
+на процент попаданий — его видно в `make memcached-stats` (`get_hits` / `get_misses` / `evictions`).
+
+Volume у сервиса нет: кеш по определению одноразовый, после перезапуска контейнера он просто пуст.
+Порт наружу не пробрасывается — в memcached нет аутентификации, доступ есть только у контейнеров
+внутри сети docker.
+
+---
+
 ## Переменные окружения
 
 Файл `.env` создаётся из `.env.example` скриптом `create.sh`. Основные переменные:
@@ -213,9 +308,11 @@ make sphinx-enable
 | Переменная | Описание |
 |---|---|
 | `COMPOSE_PROJECT_NAME` | Префикс имён контейнеров |
-| `COMPOSE_PROFILES` | Опциональные сервисы: пусто или `sphinx` |
+| `COMPOSE_PROFILES` | Опциональные сервисы через запятую: пусто, `sphinx`, `memcached` |
 | `PHP_VERSION` | Версия PHP (8.1 / 8.2 / 8.3 / 8.4) |
 | `MYSQL_VERSION` | Версия MySQL (8.0 / 8.1 / 8.2 / 8.3 / 8.4) |
+| `MEMCACHED_VERSION` | Версия образа memcached |
+| `MEMCACHED_MEMORY` | Потолок памяти memcached под кеш, МБ |
 | `HOST_MACHINE_UNSECURE_HOST_PORT` | Внешний HTTP-порт |
 | `MYSQL_DATABASE` | Имя базы данных |
 | `MYSQL_USER` | Пользователь MySQL |
