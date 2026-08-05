@@ -1,4 +1,4 @@
-.PHONY: help build up down restart logs ps composer-install composer-update composer-require composer-remove shell shell-db clean db-reset db-connect sphinx-enable sphinx-disable sphinx-cli sphinx-status sphinx-truncate
+.PHONY: help build up down restart logs ps composer-install composer-update composer-require composer-remove shell shell-db clean db-reset db-connect sphinx-enable sphinx-disable sphinx-cli sphinx-status sphinx-truncate memcached-enable memcached-disable memcached-stats memcached-flush
 
 # Подключение .env файла
 ifneq (,$(wildcard ./.env))
@@ -17,11 +17,12 @@ WEBSERVER_CONTAINER = ${COMPOSE_PROJECT_NAME}_webserver
 PHP_CONTAINER = ${COMPOSE_PROJECT_NAME}_app
 DB_CONTAINER = ${COMPOSE_PROJECT_NAME}_db
 SPHINX_CONTAINER = ${COMPOSE_PROJECT_NAME}_sphinx
+MEMCACHED_CONTAINER = ${COMPOSE_PROJECT_NAME}_memcached
 COMPOSER_DIR = ./
 
 # Профили всех опциональных сервисов. Команды остановки, логов и статуса должны видеть
 # весь стек: docker compose down не трогает контейнеры сервисов с неактивным профилем
-ALL_PROFILES = sphinx
+ALL_PROFILES = sphinx,memcached
 COMPOSE_ALL = COMPOSE_PROFILES=$(ALL_PROFILES) docker compose
 
 # Идентификатор индекса из .docker/sphinx/conf/sphinx.conf
@@ -33,6 +34,38 @@ SPHINX_GUARD = if [ -z "$$(docker ps -q -f name=^/${SPHINX_CONTAINER}$$)" ]; the
 		echo "${YELLOW}Контейнер ${SPHINX_CONTAINER} не запущен. Включить Sphinx: make sphinx-enable${NC}"; \
 		exit 1; \
 	fi
+
+MEMCACHED_COMPOSE = COMPOSE_PROFILES=memcached docker compose
+# Управляющие команды memcached принимает по своему текстовому протоколу — гоняем их через nc,
+# он есть в образе. -w 1 нужен, чтобы nc не висел в ожидании закрытия соединения сервером
+MEMCACHED_CMD = $(MEMCACHED_COMPOSE) exec -T memcached sh -c
+MEMCACHED_GUARD = if [ -z "$$(docker ps -q -f name=^/${MEMCACHED_CONTAINER}$$)" ]; then \
+		echo "${YELLOW}Контейнер ${MEMCACHED_CONTAINER} не запущен. Включить memcached: make memcached-enable${NC}"; \
+		exit 1; \
+	fi
+
+# COMPOSE_PROFILES правим по одному элементу списка: включение одного опционального
+# сервиса не должно выключать остальные. $(1) — имя профиля.
+# awk отбрасывает пустые элементы и дубликаты, сохраняя порядок.
+define profile_add
+	@if [ ! -f .env ]; then echo "${YELLOW}Нет файла .env${NC}"; exit 1; fi
+	@new=$$(grep -m1 '^COMPOSE_PROFILES=' .env | cut -d= -f2- | tr ',' '\n'; echo '$(1)'); \
+	new=$$(echo "$$new" | awk 'NF && !seen[$$0]++' | paste -sd, -); \
+	if grep -q '^COMPOSE_PROFILES=' .env; then \
+		sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=$$new|" .env; \
+	else \
+		echo "COMPOSE_PROFILES=$$new" >> .env; \
+	fi
+endef
+
+define profile_remove
+	@if [ ! -f .env ]; then echo "${YELLOW}Нет файла .env${NC}"; exit 1; fi
+	@new=$$(grep -m1 '^COMPOSE_PROFILES=' .env | cut -d= -f2- | tr ',' '\n' \
+		| awk -v p='$(1)' 'NF && $$0 != p' | paste -sd, -); \
+	if grep -q '^COMPOSE_PROFILES=' .env; then \
+		sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=$$new|" .env; \
+	fi
+endef
 
 help: ## Показать справку по командам
 	@echo "${GREEN}Доступные команды:${NC}"
@@ -71,6 +104,9 @@ logs-app: ## Показать логи php
 
 logs-sphinx: ## Показать логи Sphinx
 	$(SPHINX_COMPOSE) logs -f sphinx
+
+logs-memcached: ## Показать логи memcached
+	$(MEMCACHED_COMPOSE) logs -f memcached
 
 ps: ## Показать статус контейнеров
 	$(COMPOSE_ALL) ps
@@ -136,24 +172,16 @@ db-reset: ## Пересоздать volume базы данных (удалит �
 	@echo "${GREEN}База данных пересоздана!${NC}"
 
 sphinx-enable: ## Включить сервис Sphinx (профиль в .env) и запустить его
-	@if [ ! -f .env ]; then echo "${YELLOW}Нет файла .env${NC}"; exit 1; fi
-	@if grep -q "^COMPOSE_PROFILES=" .env; then \
-		sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=sphinx|" .env; \
-	else \
-		echo "COMPOSE_PROFILES=sphinx" >> .env; \
-	fi
+	$(call profile_add,sphinx)
 	@mkdir -p ./logs/sphinx
 	@echo "${GREEN}Профиль sphinx включён, собираем и запускаем контейнер...${NC}"
 	$(SPHINX_COMPOSE) up -d --build sphinx
 	@echo "${GREEN}Sphinx запущен. Настройки для админки Битрикса: sphinx:9306, индекс '${SPHINX_INDEX}'${NC}"
 
 sphinx-disable: ## Отключить сервис Sphinx и удалить его контейнер
-	@if [ ! -f .env ]; then echo "${YELLOW}Нет файла .env${NC}"; exit 1; fi
 	@echo "${YELLOW}Остановка и удаление контейнера Sphinx (индекс в volume сохранится)...${NC}"
 	-@$(SPHINX_COMPOSE) rm -sf sphinx
-	@if grep -q "^COMPOSE_PROFILES=" .env; then \
-		sed -i "s|^COMPOSE_PROFILES=.*|COMPOSE_PROFILES=|" .env; \
-	fi
+	$(call profile_remove,sphinx)
 	@echo "${GREEN}Профиль sphinx отключён${NC}"
 
 sphinx-cli: ## Открыть консоль SphinxQL
@@ -171,6 +199,28 @@ sphinx-truncate: ## Очистить индекс Sphinx (после нужна 
 	@read -p "Продолжить? [y/N]: " confirm && [ "$$confirm" = "y" ] || exit 1
 	@$(SPHINX_SQL) -e "TRUNCATE RTINDEX ${SPHINX_INDEX};"
 	@echo "${GREEN}Индекс очищен. Выполните переиндексацию: Настройки > Поиск > Переиндексация${NC}"
+
+memcached-enable: ## Включить сервис memcached (профиль в .env) и запустить его
+	$(call profile_add,memcached)
+	@echo "${GREEN}Профиль memcached включён, запускаем контейнер...${NC}"
+	$(MEMCACHED_COMPOSE) up -d memcached
+	@echo "${GREEN}memcached запущен. В bitrix/.settings.php host должен быть 'memcached', порт 11211${NC}"
+
+memcached-disable: ## Отключить сервис memcached и удалить его контейнер
+	@echo "${YELLOW}Остановка и удаление контейнера memcached (кеш будет потерян)...${NC}"
+	-@$(MEMCACHED_COMPOSE) rm -sf memcached
+	$(call profile_remove,memcached)
+	@echo "${GREEN}Профиль memcached отключён. Не забудьте переключить кеш в bitrix/.settings.php на CacheEngineFiles${NC}"
+
+memcached-stats: ## Показать статистику memcached (объём кеша, попадания, промахи)
+	@$(MEMCACHED_GUARD)
+	@$(MEMCACHED_CMD) "echo stats | nc -w 1 127.0.0.1 11211" \
+		| grep -E "STAT (curr_items|bytes|limit_maxbytes|get_hits|get_misses|evictions|uptime) "
+
+memcached-flush: ## Очистить весь кеш memcached
+	@$(MEMCACHED_GUARD)
+	@$(MEMCACHED_CMD) "echo flush_all | nc -w 1 127.0.0.1 11211" > /dev/null
+	@echo "${GREEN}Кеш memcached очищен${NC}"
 
 clean: ## Остановить и удалить все контейнеры, сети и volumes
 	@echo "${YELLOW}Удаление всех контейнеров, сетей и volumes...${NC}"

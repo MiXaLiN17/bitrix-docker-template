@@ -95,6 +95,26 @@ services:
     #   - ${HOST_MACHINE_SPHINX_PORT:-9306}:9306
     networks:
       - app
+  memcached:
+    # Опциональный сервис: запускается, только если в .env указан профиль memcached
+    # (см. make memcached-enable / memcached-disable)
+    profiles:
+      - memcached
+    image: memcached:${MEMCACHED_VERSION:-1.6}-alpine
+    container_name: '${COMPOSE_PROJECT_NAME}_memcached'
+    #    restart: always
+    # -m — потолок памяти под кеш в мегабайтах. При его исчерпании memcached вытесняет
+    # старые записи, а не отдаёт ошибку, так что значение влияет на процент попаданий
+    command: ["-m", "${MEMCACHED_MEMORY:-256}"]
+    # Данные кеша по определению одноразовые — volume не нужен, при рестарте кеш просто пуст.
+    # Порт наружу тоже не нужен: Битрикс ходит в memcached:11211 внутри сети app
+    healthcheck:
+      test: ["CMD-SHELL", "echo version | nc -w 1 127.0.0.1 11211 | grep -q VERSION"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - app
 
 volumes:
   db-data:
