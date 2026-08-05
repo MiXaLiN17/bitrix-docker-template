@@ -1,4 +1,4 @@
-# clearbitrix.loc
+# Bitrix Docker Template
 
 Docker-шаблон для локальной разработки PHP-проектов на базе 1С-Битрикс.
 
@@ -17,8 +17,8 @@ Docker-шаблон для локальной разработки PHP-прое�
 ## Быстрый старт
 
 ```bash
-git clone <repo-url> clearbitrix.loc
-cd clearbitrix.loc
+git clone git@github.com:MiXaLiN17/bitrix-docker-template.git myproject.loc
+cd myproject.loc
 ./create.sh
 ```
 
