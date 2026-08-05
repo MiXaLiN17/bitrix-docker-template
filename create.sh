@@ -136,6 +136,11 @@ set_env_var "COMPOSE_PROFILES" "$COMPOSE_PROFILES"
 # Create log directories and src placeholder
 mkdir -p ./logs/webserver ./logs/app ./logs/mysql ./logs/sphinx ./src
 
+# src/.gitkeep нужен только репозиторию шаблона, чтобы пустой каталог попал в git.
+# У проекта src — корень сайта, и посторонний файл там ни к чему. Удаляем здесь,
+# а не в блоке очистки в конце: тот выполняется только при успешной сборке.
+rm -f ./src/.gitkeep
+
 echo -e "${GREEN}Environment configured:${NC}"
 echo -e "  Project   : ${PROJECT_NAME}"
 echo -e "  PHP       : ${PHP_VERSION}"
