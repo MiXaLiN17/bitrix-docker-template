@@ -20,6 +20,15 @@ SPHINX_CONTAINER = ${COMPOSE_PROJECT_NAME}_sphinx
 MEMCACHED_CONTAINER = ${COMPOSE_PROJECT_NAME}_memcached
 COMPOSER_DIR = ./
 
+# Консольный клиент БД. В MariaDB 11.x симлинков mysql/mysqladmin/mysqld в образе
+# больше нет, остались только mariadb-* — поэтому имя клиента зависит от движка
+DB_ENGINE ?= mysql
+ifeq ($(DB_ENGINE),mariadb)
+DB_CLIENT = mariadb
+else
+DB_CLIENT = mysql
+endif
+
 # Профили всех опциональных сервисов. Команды остановки, логов и статуса должны видеть
 # весь стек: docker compose down не трогает контейнеры сервисов с неактивным профилем
 ALL_PROFILES = sphinx,memcached
@@ -153,12 +162,12 @@ shell-sphinx: ## Открыть shell в контейнере Sphinx
 	@echo "${GREEN}Подключение к контейнеру Sphinx...${NC}"
 	$(SPHINX_COMPOSE) exec sphinx bash
 
-mysql: ## Подключиться к MySQL
-	docker compose exec db mysql -uroot -p
+mysql: ## Подключиться к БД под root
+	docker compose exec db $(DB_CLIENT) -uroot -p
 
-db-connect: ## Подключиться к MySQL с пользователем docker
-	@echo "${GREEN}Подключение к MySQL (user: docker, password: docker)...${NC}"
-	docker compose exec db mysql -udocker -pdocker docker
+db-connect: ## Подключиться к БД с пользователем docker
+	@echo "${GREEN}Подключение к БД ($(DB_ENGINE), user: docker, password: docker)...${NC}"
+	docker compose exec db $(DB_CLIENT) -udocker -pdocker docker
 
 db-reset: ## Пересоздать volume базы данных (удалит все данные!)
 	@echo "${YELLOW}ВНИМАНИЕ: Это удалит все данные базы данных!${NC}"
