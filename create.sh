@@ -63,28 +63,48 @@ case "$PHP_CHOICE" in
     *) PHP_VERSION="8.4" ;;
 esac
 
-# Prompt: MySQL version
-# 8.4 and 8.0 are LTS releases; 8.1-8.3 are EOL Innovation releases kept for parity
-# with legacy production servers. Bitrix requires 8.0 minimum and recommends 8.4+.
-MYSQL_VERSIONS=("8.4" "8.3" "8.2" "8.1" "8.0")
-DEFAULT_MYSQL_VERSION="8.4"
-echo "MySQL version:"
-for i in "${!MYSQL_VERSIONS[@]}"; do
-    case "${MYSQL_VERSIONS[$i]}" in
-        8.4) note=" (default, LTS, recommended by Bitrix)" ;;
-        8.0) note=" (LTS, minimum supported by Bitrix)" ;;
-        *)   note=" (Innovation, EOL)" ;;
-    esac
-    echo "  $((i+1))) ${MYSQL_VERSIONS[$i]}${note}"
-done
-read -rp "Select [1]: " MYSQL_CHOICE
-case "$MYSQL_CHOICE" in
-    2) MYSQL_VERSION="8.3" ;;
-    3) MYSQL_VERSION="8.2" ;;
-    4) MYSQL_VERSION="8.1" ;;
-    5) MYSQL_VERSION="8.0" ;;
-    *) MYSQL_VERSION="$DEFAULT_MYSQL_VERSION" ;;
+# Prompt: database engine. Picks the build context of the db service — configs live in
+# .docker/mysql and .docker/mariadb. MySQL is the default because Bitrix recommends it;
+# MariaDB is here for dumps taken from MariaDB 11.4+, which carry *_uca1400_* collations
+# MySQL does not know and refuses to import ("Unknown collation").
+echo "Database engine:"
+echo "  1) mysql (default, recommended by Bitrix)"
+echo "  2) mariadb (for dumps from MariaDB 11.4+ with uca1400 collations)"
+read -rp "Select [1]: " DB_ENGINE_CHOICE
+case "$DB_ENGINE_CHOICE" in
+    2) DB_ENGINE="mariadb" ;;
+    *) DB_ENGINE="mysql" ;;
 esac
+
+# Prompt: database version. The list depends on the engine chosen above.
+# MySQL: 8.4 and 8.0 are LTS releases; 8.1-8.3 are EOL Innovation releases kept for
+# parity with legacy production servers. Bitrix requires 8.0 minimum and recommends 8.4+.
+# MariaDB: both offered branches are LTS — 11.4 until 2029, 10.11 until 2028.
+if [ "$DB_ENGINE" = "mariadb" ]; then
+    echo "MariaDB version:"
+    echo "  1) 11.4 (default, LTS, supported until 2029)"
+    echo "  2) 10.11 (LTS, supported until 2028)"
+    read -rp "Select [1]: " DB_VERSION_CHOICE
+    case "$DB_VERSION_CHOICE" in
+        2) DB_VERSION="10.11" ;;
+        *) DB_VERSION="11.4" ;;
+    esac
+else
+    echo "MySQL version:"
+    echo "  1) 8.4 (default, LTS, recommended by Bitrix)"
+    echo "  2) 8.3 (Innovation, EOL)"
+    echo "  3) 8.2 (Innovation, EOL)"
+    echo "  4) 8.1 (Innovation, EOL)"
+    echo "  5) 8.0 (LTS, minimum supported by Bitrix)"
+    read -rp "Select [1]: " DB_VERSION_CHOICE
+    case "$DB_VERSION_CHOICE" in
+        2) DB_VERSION="8.3" ;;
+        3) DB_VERSION="8.2" ;;
+        4) DB_VERSION="8.1" ;;
+        5) DB_VERSION="8.0" ;;
+        *) DB_VERSION="8.4" ;;
+    esac
+fi
 
 # Optional services: every "yes" adds its Docker Compose profile to COMPOSE_PROFILES
 COMPOSE_PROFILES=""
@@ -130,7 +150,8 @@ set_env_var "UID" "$(id -u)"
 set_env_var "GID" "$(id -g)"
 set_env_var "HOST_MACHINE_UNSECURE_HOST_PORT" "$HTTP_PORT"
 set_env_var "PHP_VERSION" "$PHP_VERSION"
-set_env_var "MYSQL_VERSION" "$MYSQL_VERSION"
+set_env_var "DB_ENGINE" "$DB_ENGINE"
+set_env_var "DB_VERSION" "$DB_VERSION"
 set_env_var "COMPOSE_PROFILES" "$COMPOSE_PROFILES"
 
 # Create log directories and src placeholder
@@ -144,7 +165,7 @@ rm -f ./src/.gitkeep
 echo -e "${GREEN}Environment configured:${NC}"
 echo -e "  Project   : ${PROJECT_NAME}"
 echo -e "  PHP       : ${PHP_VERSION}"
-echo -e "  MySQL     : ${MYSQL_VERSION}"
+echo -e "  Database  : ${DB_ENGINE} ${DB_VERSION}"
 echo -e "  Sphinx    : $([ -n "$SPHINX_ENABLED" ] && echo "yes" || echo "no (enable later: make sphinx-enable)")"
 echo -e "  memcached : $([ -n "$MEMCACHED_ENABLED" ] && echo "yes" || echo "no (enable later: make memcached-enable)")"
 echo -e "  URL       : http://localhost:${HTTP_PORT}"

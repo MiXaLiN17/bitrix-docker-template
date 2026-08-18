@@ -42,13 +42,18 @@ services:
     networks:
       - app
   db:
+    # Движок БД выбирается в .env через DB_ENGINE: mysql или mariadb. Имя подставляется
+    # в путь к контексту сборки, конфиги движков лежат в .docker/mysql и .docker/mariadb.
+    # Менять DB_ENGINE на развёрнутом проекте нельзя: содержимое volume несовместимо
+    # между движками, после смены нужен make db-reset
     build:
-      context: ./.docker/mysql
+      context: ./.docker/${DB_ENGINE:-mysql}
       args:
-        MYSQL_VERSION: ${MYSQL_VERSION:-8.4}
+        DB_VERSION: ${DB_VERSION:-8.4}
     container_name: '${COMPOSE_PROJECT_NAME}_db'
     #    restart: always
-    command: mysqld --sql-mode=""
+    # sql-mode="" для Битрикса задан в conf/my.cnf обоих движков, отдельная команда
+    # запуска не нужна — тем более что бинарник называется mysqld только у MySQL
     # ports:
     #   - ${HOST_MACHINE_MYSQL_PORT:-3306}:3306
     volumes:

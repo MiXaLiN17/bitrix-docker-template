@@ -1,7 +1,7 @@
-# Образ с DockerHub. Версия задаётся в .env (MYSQL_VERSION).
+# Образ с DockerHub. Версия задаётся в .env (DB_VERSION).
 # Битрикс требует минимум MySQL 8.0, рекомендованная версия — 8.4 и выше.
-ARG MYSQL_VERSION=8.4
-FROM mysql:${MYSQL_VERSION}
+ARG DB_VERSION=8.4
+FROM mysql:${DB_VERSION}
 
 COPY conf/my.cnf /etc/mysql/conf.d/my.cnf
 
